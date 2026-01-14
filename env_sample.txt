@@ -1,0 +1,13 @@
+# Database Configuration
+# Rename this file to .env and update with your actual credentials
+
+# MySQL Database
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=portfolio
+DB_USER=root
+DB_PASSWORD=your_password_here
+
+# OpenAI API Key (for AI Chatbot feature)
+# Get your API key from: https://platform.openai.com/api-keys
+OPENAI_API_KEY=your_openai_api_key_here
