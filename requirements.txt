@@ -27,9 +27,10 @@ mysql-connector-python
 SQLAlchemy
 validators==0.28.1
 youtube_transcript_api
-unstructured
+unstructured>=0.18.32
 pytube
 numexpr
 huggingface_hub
 langchain_community
 psycopg2-binary
+plotly

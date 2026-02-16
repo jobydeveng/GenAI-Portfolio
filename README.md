@@ -164,10 +164,16 @@ myPortfolio/
 
 ## Troubleshooting
 
+**Duplicate Key Error (PostgreSQL Sequence Issue)**:
+- Run `python fix_sequence.py` to reset the database sequence
+- This fixes "duplicate key value violates unique constraint" errors
+- See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed instructions
+
 **Database Connection Error**: 
-- Verify your MySQL server is running
+- Verify your PostgreSQL/Neon database is accessible
 - Check your `.env` file has correct credentials
-- Ensure the `portfolio` database exists
+- Ensure SSL mode is set to `require` for Neon
+- See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for more details
 
 **Import Errors**:
 - Make sure all dependencies are installed: `pip install -r requirements.txt`
@@ -176,7 +182,9 @@ myPortfolio/
 **Data Not Showing**:
 - Make sure you've added categories first
 - Verify data was saved successfully (check for success message)
-- Check the database directly if needed
+- Check the database connection
+
+For more detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## Future Enhancements
 

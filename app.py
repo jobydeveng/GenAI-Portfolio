@@ -12,10 +12,12 @@ from db_operations import (
     get_portfolio_data,
     get_all_months,
     get_monthly_summary,
-    delete_category
+    delete_category,
+    get_portfolio_value_history
 )
 from chat_agent import PortfolioChatAgent
 import os
+import plotly.graph_objects as go
 
 # Page configuration
 st.set_page_config(
@@ -451,6 +453,8 @@ st.markdown("""
 # Initialize session state
 if 'refresh' not in st.session_state:
     st.session_state.refresh = 0
+if 'show_numbers' not in st.session_state:
+    st.session_state.show_numbers = False  # Hide numbers by default
 
 def main():
     st.title("💰 Portfolio Management System")
@@ -479,9 +483,32 @@ def main():
     with tabs[4]:
         show_chatbot()
 
+def format_currency(amount, show_numbers=True):
+    """Format currency value based on visibility preference"""
+    if show_numbers:
+        return f"₹{amount:,.2f}"
+    else:
+        return "₹••••••"
+
 def show_dashboard():
     """Display portfolio dashboard with summary"""
-    st.header("Portfolio Dashboard")
+    col_header, col_icon = st.columns([6, 1])
+    
+    with col_header:
+        st.header("Portfolio Dashboard")
+    
+    with col_icon:
+        st.markdown("")  # Add spacing to align with header
+        if st.session_state.show_numbers:
+            if st.button("🔒", key="hide_dash", help="Hide numbers for privacy"):
+                st.session_state.show_numbers = False
+                st.rerun()
+        else:
+            if st.button("👁️", key="show_dash", help="Show numbers"):
+                st.session_state.show_numbers = True
+                st.rerun()
+    
+    st.markdown("---")
     
     # Get all months
     months = get_all_months()
@@ -523,7 +550,8 @@ def show_dashboard():
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.metric("Total Portfolio Value", f"₹{summary.get('total_value', 0):,.2f}")
+            total_value = summary.get('total_value', 0)
+            st.metric("Total Portfolio Value", format_currency(total_value, st.session_state.show_numbers))
         
         with col2:
             st.metric("Categories", summary.get('category_count', 0))
@@ -535,6 +563,200 @@ def show_dashboard():
         
         st.markdown("")  # Add spacing
         
+        # Portfolio Value Comparison with Previous Months
+        st.markdown("---")
+        st.markdown("### 📈 Portfolio Growth Analysis")
+        st.markdown("")  # Add spacing
+        
+        # Get historical data
+        history = get_portfolio_value_history(num_months=6)
+        
+        if history and len(history) > 0:
+            # Create DataFrame for visualization
+            history_df = pd.DataFrame(history)
+            history_df['month_label'] = history_df.apply(
+                lambda x: f"{['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][x['month']-1]} {x['year']}", 
+                axis=1
+            )
+            
+            # Show bar chart only if numbers are visible
+            if st.session_state.show_numbers:
+                # Add placeholder months for future (to not use entire width)
+                # Calculate next 3 months after the last data point
+                last_year = int(history_df.iloc[-1]['year'])
+                last_month = int(history_df.iloc[-1]['month'])
+                
+                month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                future_months = []
+                for i in range(1, 4):
+                    future_m = last_month + i
+                    future_y = last_year
+                    if future_m > 12:
+                        future_m = future_m - 12
+                        future_y += 1
+                    future_months.append(f"{month_names[future_m-1]} {future_y}")
+                
+                all_labels = list(history_df['month_label']) + future_months
+                all_values = list(history_df['total_value']) + [0, 0, 0]
+                
+                # Create attractive Plotly bar chart
+                fig = go.Figure()
+                
+                # Create gradient colors based on values (darker green for higher values)
+                actual_values = [val for val in all_values if val > 0]
+                if actual_values:
+                    max_val = max(actual_values)
+                    min_val = min(actual_values)
+                    
+                    colors = []
+                    for val in all_values:
+                        if val == 0:
+                            colors.append('#4A5568')  # Gray for future months
+                        elif max_val > min_val:
+                            # Gradient from lighter to darker green
+                            intensity = (val - min_val) / (max_val - min_val)
+                            if intensity < 0.33:
+                                colors.append('#81C784')  # Light green
+                            elif intensity < 0.66:
+                                colors.append('#66BB6A')  # Medium green
+                            else:
+                                colors.append('#4CAF50')  # Dark green
+                        else:
+                            colors.append('#4CAF50')
+                else:
+                    colors = ['#4A5568'] * len(all_values)
+                
+                fig.add_trace(go.Bar(
+                    x=all_labels,
+                    y=all_values,
+                    text=[f'₹{val:,.0f}' if val > 0 else '📊' for val in all_values],
+                    textposition='outside',
+                    textfont=dict(size=14, color='#E2E8F0', weight='bold'),
+                    marker=dict(
+                        color=colors,
+                        line=dict(color='#1A202C', width=2),
+                        opacity=[1 if val > 0 else 0.3 for val in all_values]
+                    ),
+                    hovertemplate='<b>%{x}</b><br>Value: ₹%{y:,.2f}<extra></extra>',
+                    name='Portfolio Value'
+                ))
+                
+                # Update layout for dark theme and better appearance
+                fig.update_layout(
+                    title=dict(
+                        text='Monthly Portfolio Value Trend',
+                        font=dict(size=20, color='#E2E8F0', weight='bold'),
+                        x=0.5,
+                        xanchor='center'
+                    ),
+                    xaxis=dict(
+                        title=dict(text='Month', font=dict(size=14, color='#E2E8F0')),
+                        tickfont=dict(size=12, color='#CBD5E0'),
+                        gridcolor='#4A5568',
+                        showgrid=False
+                    ),
+                    yaxis=dict(
+                        title=dict(text='Portfolio Value (₹)', font=dict(size=14, color='#E2E8F0')),
+                        tickfont=dict(size=12, color='#CBD5E0'),
+                        gridcolor='#4A5568',
+                        showgrid=True,
+                        tickformat=',.0f'
+                    ),
+                    plot_bgcolor='#1A202C',
+                    paper_bgcolor='#2D3748',
+                    height=500,
+                    margin=dict(l=70, r=50, t=80, b=70),
+                    hovermode='x unified',
+                    showlegend=False,
+                    annotations=[
+                        dict(
+                            text='Future Months →',
+                            xref='paper',
+                            yref='paper',
+                            x=0.85,
+                            y=0.95,
+                            showarrow=False,
+                            font=dict(size=11, color='#A0AEC0', style='italic'),
+                            bgcolor='#2D3748',
+                            bordercolor='#4A5568',
+                            borderwidth=1,
+                            borderpad=4
+                        )
+                    ]
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Add a small legend for colors
+                col_legend1, col_legend2, col_legend3 = st.columns(3)
+                with col_legend1:
+                    st.markdown('<span style="color: #81C784;">●</span> Lower Value &nbsp;&nbsp; <span style="color: #66BB6A;">●</span> Medium Value &nbsp;&nbsp; <span style="color: #4CAF50;">●</span> Higher Value', unsafe_allow_html=True)
+                with col_legend2:
+                    pass
+                with col_legend3:
+                    st.markdown('<span style="color: #4A5568;">●</span> Future Months (Placeholder)', unsafe_allow_html=True)
+                
+                st.markdown("")  # Add spacing
+                
+                # Calculate growth/decline
+                if len(history_df) >= 2:
+                    current_value = float(history_df.iloc[-1]['total_value'])
+                    previous_value = float(history_df.iloc[-2]['total_value'])
+                    
+                    change = current_value - previous_value
+                    percentage_change = (change / previous_value * 100) if previous_value > 0 else 0
+                    
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.metric(
+                            "Current Month Value",
+                            format_currency(current_value, True),
+                            delta=None
+                        )
+                    
+                    with col2:
+                        st.metric(
+                            "Previous Month Value",
+                            format_currency(previous_value, True),
+                            delta=None
+                        )
+                    
+                    with col3:
+                        # Show growth or decline with proper formatting
+                        delta_display = f"{format_currency(abs(change), True)} ({abs(percentage_change):.2f}%)"
+                        if change >= 0:
+                            st.metric(
+                                "Growth",
+                                "📈 Positive",
+                                delta=delta_display,
+                                delta_color="normal"
+                            )
+                        else:
+                            st.metric(
+                                "Decline",
+                                "📉 Negative",
+                                delta=f"-{delta_display}",
+                                delta_color="inverse"
+                            )
+                    
+                    # Additional insights
+                    st.markdown("")
+                    if change > 0:
+                        st.success(f"✅ Your portfolio has grown by **{format_currency(change, True)}** ({percentage_change:.2f}%) compared to the previous month!")
+                    elif change < 0:
+                        st.warning(f"⚠️ Your portfolio has decreased by **{format_currency(abs(change), True)}** ({abs(percentage_change):.2f}%) compared to the previous month.")
+                    else:
+                        st.info("ℹ️ Your portfolio value remained unchanged from the previous month.")
+                else:
+                    st.info("ℹ️ Add more months of data to see growth/decline comparison.")
+            else:
+                st.info("🔒 Show numbers to see portfolio growth analysis.")
+        else:
+            st.info("📝 No historical data available for comparison. Add more monthly data to see growth trends.")
+        
+        st.markdown("")  # Add spacing
+        
         # Get detailed data
         data = get_portfolio_data(selected_year, selected_month)
         
@@ -543,18 +765,19 @@ def show_dashboard():
             st.markdown("### 💼 Category Breakdown")
             st.markdown("")  # Add spacing
             df = pd.DataFrame(data)
-            df['amount'] = df['amount'].apply(lambda x: f"₹{x:,.2f}")
+            df['amount'] = df['amount'].apply(lambda x: format_currency(x, st.session_state.show_numbers))
             df = df[['category_name', 'amount']]
             df.columns = ['Category', 'Amount']
             st.dataframe(df, use_container_width=True, hide_index=True)
             
-            # Show chart
-            chart_data = pd.DataFrame(data)
-            if not chart_data.empty:
-                st.markdown("")  # Add spacing
-                st.markdown("### 📊 Portfolio Distribution")
-                st.markdown("")  # Add spacing
-                st.bar_chart(chart_data.set_index('category_name')['amount'])
+            # Show chart only if numbers are visible
+            if st.session_state.show_numbers:
+                chart_data = pd.DataFrame(data)
+                if not chart_data.empty:
+                    st.markdown("")  # Add spacing
+                    st.markdown("### 📊 Portfolio Distribution")
+                    st.markdown("")  # Add spacing
+                    st.bar_chart(chart_data.set_index('category_name')['amount'])
 
 def show_add_data():
     """Add portfolio data for a specific month"""
@@ -721,8 +944,23 @@ def show_manage_categories():
 
 def show_history():
     """View portfolio history"""
-    st.header("Portfolio History")
-    st.markdown("")  # Add spacing
+    col_header, col_icon = st.columns([6, 1])
+    
+    with col_header:
+        st.header("Portfolio History")
+    
+    with col_icon:
+        st.markdown("")  # Add spacing to align with header
+        if st.session_state.show_numbers:
+            if st.button("🔒", key="hide_history", help="Hide numbers for privacy"):
+                st.session_state.show_numbers = False
+                st.rerun()
+        else:
+            if st.button("👁️", key="show_history", help="Show numbers"):
+                st.session_state.show_numbers = True
+                st.rerun()
+    
+    st.markdown("---")
     
     st.markdown("### 🔍 Filters")
     st.markdown("")  # Add spacing
@@ -766,7 +1004,7 @@ def show_history():
     df['snapshot_date'] = pd.to_datetime(df['snapshot_date']).dt.strftime('%d %b %Y')
     df['month_name'] = df['month'].apply(lambda x: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
                                                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][x-1])
-    df['amount'] = df['amount'].apply(lambda x: f"₹{x:,.2f}")
+    df['amount'] = df['amount'].apply(lambda x: format_currency(x, st.session_state.show_numbers))
     
     # Select and rename columns
     display_df = df[['year', 'month_name', 'snapshot_date', 'category_name', 'amount']]
@@ -793,7 +1031,7 @@ def show_history():
     
     with col3:
         total_value = numeric_df['amount'].sum()
-        st.metric("Total Value (All)", f"₹{total_value:,.2f}")
+        st.metric("Total Value (All)", format_currency(total_value, st.session_state.show_numbers))
 
 def show_chatbot():
     """AI Chatbot for natural language database queries"""

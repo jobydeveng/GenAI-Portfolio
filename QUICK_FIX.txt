@@ -1,0 +1,31 @@
+================================================================================
+QUICK FIX: PostgreSQL Sequence Error
+================================================================================
+
+ERROR:
+  "duplicate key value violates unique constraint 'portfolio_value_pkey'"
+
+SOLUTION:
+  Run this command in your terminal:
+
+    python fix_sequence.py
+
+  That's it! The script will automatically fix the sequence issue.
+
+================================================================================
+
+WHAT IT DOES:
+  - Finds the highest ID in your database
+  - Resets the sequence to the next available number
+  - Verifies the fix was successful
+
+WHEN TO USE:
+  - When you see "duplicate key" errors
+  - After importing/migrating data
+  - After manually inserting records
+
+MORE HELP:
+  - See TROUBLESHOOTING.md for detailed guide
+  - See FIX_SUMMARY.md for technical explanation
+
+================================================================================
